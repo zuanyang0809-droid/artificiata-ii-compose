@@ -1,0 +1,827 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Artificiata II — Composition</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #888;
+      font-family: 'Plus Jakarta Sans', 'Helvetica Neue', Arial, sans-serif;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ── Main canvas ── */
+    #canvas-wrap {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      min-height: 0;
+      position: relative;
+    }
+    canvas { display: block; }
+
+    /* ── Composition tray ── */
+    #tray-panel {
+      background: #0c0c0c;
+      border-top: 1px solid #1e1e1e;
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+    }
+
+    #tray-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 7px 14px 6px;
+      border-bottom: 1px solid #1a1a1a;
+    }
+    #tray-label {
+      font-size: 10px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: #444;
+    }
+    #tray-header button {
+      background: transparent;
+      border: 1px solid #2a2a2a;
+      color: #777;
+      padding: 3px 10px;
+      border-radius: 3px;
+      font-size: 10px;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: border-color .12s, color .12s;
+    }
+    #tray-header button:hover { border-color: #888; color: #fff; }
+    #btnPlayAll.playing { border-color: #fff; color: #fff; }
+    #tray-status {
+      margin-left: auto;
+      font-size: 10px;
+      color: #333;
+      letter-spacing: 0.06em;
+    }
+
+    /* Scrollable row of captured frames */
+    #tray-track {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 14px;
+      overflow-x: auto;
+      overflow-y: hidden;
+      min-height: 90px;
+      scrollbar-width: thin;
+      scrollbar-color: #2a2a2a transparent;
+    }
+    #tray-track::-webkit-scrollbar { height: 4px; }
+    #tray-track::-webkit-scrollbar-thumb { background: #2a2a2a; border-radius: 2px; }
+
+    /* Empty state hint */
+    #tray-empty {
+      font-size: 10px;
+      color: #2e2e2e;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      padding: 0 4px;
+      white-space: nowrap;
+    }
+
+    /* Each captured frame card */
+    .frame-card {
+      position: relative;
+      flex-shrink: 0;
+      cursor: grab;
+      border-radius: 3px;
+      overflow: hidden;
+      border: 1.5px solid transparent;
+      transition: border-color .12s, transform .1s;
+      user-select: none;
+    }
+    .frame-card:active { cursor: grabbing; }
+    .frame-card.playing-card {
+      border-color: rgba(255,255,255,0.9);
+    }
+    .frame-card.drag-over-card {
+      box-shadow: -3px 0 0 #fff;
+    }
+    .frame-card img {
+      display: block;
+      width: 110px;
+      height: 70px;
+      object-fit: cover;
+    }
+    /* Frame number badge */
+    .frame-badge {
+      position: absolute;
+      top: 3px;
+      left: 4px;
+      font-size: 9px;
+      color: rgba(255,255,255,0.6);
+      letter-spacing: 0.04em;
+      background: rgba(0,0,0,0.45);
+      padding: 1px 4px;
+      border-radius: 2px;
+    }
+    /* Delete button */
+    .frame-delete {
+      position: absolute;
+      top: 3px;
+      right: 4px;
+      width: 14px;
+      height: 14px;
+      background: rgba(0,0,0,0.5);
+      border: none;
+      border-radius: 2px;
+      color: rgba(255,255,255,0.5);
+      font-size: 10px;
+      line-height: 14px;
+      text-align: center;
+      cursor: pointer;
+      padding: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      transition: opacity .12s;
+    }
+    .frame-card:hover .frame-delete { opacity: 1; }
+    .frame-delete:hover { color: #fff; background: rgba(180,30,30,0.7); }
+
+    /* Controls bar */
+    #controls {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      background: #0a0a0a;
+      border-top: 1px solid #1a1a1a;
+    }
+    .ctrl-row {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 6px 14px;
+      border-bottom: 1px solid #111;
+    }
+    .ctrl-row:last-child { border-bottom: none; }
+    .ctrl-right {
+      margin-left: auto;
+      display: flex;
+      gap: 6px;
+      align-items: center;
+    }
+    .ctrl-group { display: flex; align-items: center; gap: 7px; }
+    .ctrl-section-label { font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: #444; }
+    label { color: #555; text-transform: uppercase; font-size: 10px; letter-spacing: 0.06em; }
+    select {
+      background: #111; border: 1px solid #2a2a2a; color: #bbb;
+      padding: 3px 7px; border-radius: 3px; font-size: 11px; cursor: pointer;
+    }
+    input[type=range] {
+      -webkit-appearance: none; width: 68px; height: 2px;
+      background: #333; border: none; outline: none; padding: 0; cursor: pointer;
+    }
+    input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none; width: 11px; height: 11px;
+      border-radius: 50%; background: #bbb; cursor: pointer;
+    }
+    .val { color: #444; font-size: 10px; width: 22px; }
+    button {
+      background: transparent; border: 1px solid #333; color: #888;
+      padding: 4px 11px; border-radius: 3px; font-size: 10px;
+      letter-spacing: 0.06em; text-transform: uppercase; cursor: pointer;
+      transition: border-color .15s, color .15s;
+    }
+    button:hover { border-color: #888; color: #fff; }
+    #btnCapture { border-color: #555; color: #bbb; }
+    #btnCapture:hover { border-color: #fff; color: #fff; }
+    #info { margin-left: auto; color: #2e2e2e; font-size: 10px; letter-spacing: 0.06em; }
+  </style>
+</head>
+<body>
+
+<div id="canvas-wrap"></div>
+
+<!-- Composition tray -->
+<div id="tray-panel">
+  <div id="tray-header" style="display:none">
+    <button id="btnPlayAll" disabled></button>
+    <button id="btnClearAll"></button>
+    <span id="tray-status"></span>
+  </div>
+  <!-- Composition controls row — above the frame thumbnails -->
+  <div class="ctrl-row" style="border-bottom:1px solid #1a1a1a;">
+    <span class="ctrl-section-label">Composition</span>
+    <button id="btnPlayAllRow" onclick="document.getElementById('btnPlayAll').click()">▶ Play all</button>
+    <button id="btnClearAllRow" onclick="document.getElementById('btnClearAll').click()">Clear</button>
+    <span id="tray-status-row" style="font-size:10px;color:#444;letter-spacing:0.06em;"></span>
+    <div class="ctrl-right">
+      <button id="btnSave">Save PNG</button>
+      <button id="btnCapture">⊡ Capture</button>
+    </div>
+  </div>
+  <div id="tray-track">
+    <span id="tray-empty">Capture frames to compose</span>
+  </div>
+</div>
+
+<div id="controls">
+  <!-- Dims Speed Blocks Tempo Palette | New Pause Sound -->
+  <div class="ctrl-row">
+    <div class="ctrl-group">
+      <label>Dims</label>
+      <select id="dimSel">
+        <option value="1">1</option>
+        <option value="2">2</option>
+        <option value="3">3</option>
+        <option value="4">4</option>
+        <option value="5">5</option>
+        <option value="6">6</option>
+        <option value="7">7</option>
+        <option value="8">8</option>
+        <option value="9">9</option>
+        <option value="10">10</option>
+        <option value="11" selected>11</option>
+        <option value="12">12</option>
+        <option value="13">13</option>
+        <option value="14">14</option>
+        <option value="15">15</option>
+      </select>
+    </div>
+    <div class="ctrl-group">
+      <label>Speed</label>
+      <input type="range" id="speedSel" min="0" max="100" value="18">
+      <span class="val" id="speedVal">18</span>
+    </div>
+    <div class="ctrl-group">
+      <label>Blocks</label>
+      <input type="range" id="blocksSel" min="8" max="60" value="30">
+      <span class="val" id="blocksVal">30</span>
+    </div>
+    <div class="ctrl-group">
+      <label>Tempo</label>
+      <input type="range" id="tempoSel" min="40" max="180" value="88">
+      <span class="val" id="tempoVal">88</span>
+    </div>
+    <div class="ctrl-group">
+      <label>Palette</label>
+      <select id="palSel">
+        <option value="p1">1 — Greens &amp; Purple</option>
+        <option value="p2">2 — Coral &amp; Magenta</option>
+        <option value="p3">3 — Yellow-green &amp; Grey</option>
+        <option value="p4">4 — Magenta &amp; Olive</option>
+        <option value="p5" selected>5 — Taupe &amp; Teal</option>
+        <option value="p6">6 — Grey &amp; Indigo</option>
+        <option value="p7">7 — Greyscale</option>
+        <option value="p8">8 — Olive &amp; Slate</option>
+        <option value="p9">9 — Red &amp; Gold</option>
+      </select>
+    </div>
+    <div class="ctrl-right">
+      <button id="btnNew">New</button>
+      <button id="btnPause">Pause</button>
+      <button id="btnSound">Sound: off</button>
+    </div>
+  </div>
+</div>
+<span id="info" style="display:none"></span>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.7.77/Tone.js"></script>
+<script>
+
+const PALETTES = {
+  p1:[[10,118,58],[14,155,72],[8,88,42],[28,175,88],[5,65,30],[78,38,128],[58,28,98],[38,18,78],[25,15,55],[28,58,158],[175,58,78],[18,18,18]],
+  p2:[[232,118,98],[218,88,78],[198,68,58],[245,148,118],[208,28,148],[178,18,128],[158,8,108],[225,55,165],[28,158,138],[18,128,108],[8,100,85],[98,18,158],[58,175,58],[12,12,12]],
+  p3:[[188,198,78],[158,172,58],[138,152,48],[205,215,95],[168,182,182],[138,158,162],[118,138,148],[185,198,198],[192,172,128],[162,142,98],[138,118,78],[28,28,28],[75,75,72],[208,208,198]],
+  p4:[[208,48,208],[188,28,188],[228,78,228],[245,110,245],[88,72,32],[68,58,22],[108,88,38],[128,105,48],[158,188,218],[128,162,198],[108,140,178],[228,208,28],[175,48,78],[238,238,238]],
+  p5:[[98,88,82],[78,70,66],[58,52,50],[118,108,102],[138,128,122],[148,142,58],[128,122,42],[108,102,32],[165,158,72],[58,168,158],[38,142,132],[25,118,108],[118,78,148],[88,52,118],[208,212,188]],
+  p6:[[158,158,162],[128,128,132],[98,98,102],[182,182,188],[108,108,112],[68,38,158],[52,28,128],[88,52,178],[45,22,108],[128,182,38],[98,152,22],[78,125,15],[18,18,22],[208,208,212]],
+  p7:[[48,48,48],[32,32,32],[62,62,62],[78,78,78],[105,105,105],[128,128,128],[152,152,152],[175,175,175],[198,198,198],[218,218,218],[12,12,12]],
+  p8:[[108,128,52],[88,108,38],[72,92,28],[128,148,62],[148,165,72],[88,82,158],[68,62,138],[108,102,175],[55,50,118],[42,72,42],[28,52,28],[18,38,18],[178,158,98],[148,128,72],[118,100,50],[12,12,12]],
+  p9:[[208,42,38],[182,28,28],[228,62,58],[245,88,82],[108,32,62],[82,22,48],[128,48,72],[178,148,68],[152,122,48],[128,98,32],[198,170,88],[18,138,108],[12,108,82],[8,82,60],[8,175,78],[5,142,58],[12,12,12]]
+};
+
+const SCALES = {
+  dorian:   [0,2,3,5,7,9,10,12,14,15,17,19,21,22,24],
+  mixo:     [0,2,4,5,7,9,10,12,14,16,17,19,21,22,24],
+  minor:    [0,2,3,5,7,8,10,12,14,15,17,19,20,22,24],
+  major:    [0,2,4,5,7,9,11,12,14,16,17,19,21,23,24],
+  blues:    [0,3,5,6,7,10,12,15,17,18,19,22,24],
+  wholetone:[0,2,4,6,8,10,12,14,16,18,20,22,24]
+};
+
+// Each palette has a paired scale — visual mood matches musical mood
+const PAL_SCALE = {
+  p1: 'minor',      // deep greens + purple → minor (dark, lush)
+  p2: 'blues',      // coral + magenta      → blues (hot, expressive)
+  p3: 'major',      // yellow-green + grey  → major (bright, open)
+  p4: 'wholetone',  // magenta + olive       → whole tone (dreamlike)
+  p5: 'dorian',     // taupe + teal          → dorian (jazz, warm)
+  p6: 'mixo',       // grey + indigo         → mixolydian (cool jazz)
+  p7: 'minor',      // greyscale             → minor (austere)
+  p8: 'dorian',     // olive + slate          → dorian (earthy jazz)
+  p9: 'blues'       // red + gold            → blues (intense)
+};
+
+function getScale() {
+  return PAL_SCALE[document.getElementById('palSel').value] || 'dorian';
+}
+
+function yToNote(yNorm, scaleKey) {
+  const scale = SCALES[scaleKey];
+  const idx = Math.floor((1 - Math.max(0,Math.min(1,yNorm))) * (scale.length-1));
+  return Tone.Frequency(48 + scale[idx], "midi").toNote();
+}
+function xSpanToDur(s) {
+  if(s<0.06) return "16n"; if(s<0.12) return "8n";
+  if(s<0.22) return "4n";  if(s<0.38) return "2n"; return "1n";
+}
+function durSecs(dur, bpm) {
+  return ({ "16n":.25,"8n":.5,"4n":1,"2n":2,"1n":4 }[dur]||1) * (60/bpm);
+}
+
+// Extract notes from path — represents one "phrase"
+function pathToPhrase(pathPts, rect, scaleKey) {
+  const pts = [...pathPts].map((pt,i)=>({x:pt[0],y:pt[1],i}))
+    .sort((a,b)=>a.x-b.x);
+  return pts.map((cur,i) => {
+    const next = pts[i+1];
+    const xSpan = next ? Math.max(0.02,(next.x-cur.x)/rect.w) : 0.08;
+    const yNorm = Math.max(0,Math.min(1,(cur.y-rect.y)/rect.h));
+    return {
+      note: yToNote(yNorm, scaleKey),
+      dur:  xSpanToDur(xSpan),
+      vel:  0.38 + Math.random()*0.45
+    };
+  });
+}
+
+// ── ND
+function makeVertices(n){const v=[];for(let i=0;i<(1<<n);i++){const pt=new Float32Array(n);for(let d=0;d<n;d++)pt[d]=((i>>d)&1)-.5;v.push(pt);}return v;}
+function makeDiagonalPath(n){const p=[0];let c=0;for(let d=0;d<n;d++){c|=(1<<d);p.push(c);}return p;}
+function rotateND(v,a,b,t){const ca=Math.cos(t),sa=Math.sin(t),va=v[a],vb=v[b];v[a]=va*ca-vb*sa;v[b]=va*sa+vb*ca;}
+// Per-composition rotation config — randomised on each New
+let rotConfig = [];
+let skipFrameCount = 0;      // how many consecutive frames were filtered
+const MAX_SKIP_FRAMES = 90;  // after this many skipped frames, force display
+
+function buildRotConfig(n, seed) {
+  // Seeded random for reproducibility within a composition
+  let s = (seed ^ 0x1234abcd) >>> 0;
+  const rng = () => { s = Math.imul(s^(s>>>16),0x45d9f3b)>>>0; s^=s>>>11; return (s>>>0)/4294967296; };
+
+  // Generate all possible rotation planes for n dimensions
+  const planes = [];
+  for(let a=0; a<n; a++) for(let b=a+1; b<n; b++) planes.push([a,b]);
+
+  // Pick 6-9 random planes
+  const numPlanes = 6 + Math.floor(rng() * 4);
+  const chosen = [];
+  const shuffled = [...planes].sort(()=>rng()-0.5);
+  for(let i=0; i<Math.min(numPlanes, shuffled.length); i++) chosen.push(shuffled[i]);
+
+  // Assign random speed to each plane: mix of fast and slow
+  return chosen.map(([a,b]) => ({
+    a, b,
+    speed: 0.15 + rng() * 1.1  // range 0.15 to 1.25
+  }));
+}
+
+function applyRotations(verts, t) {
+  for(const v of verts) {
+    for(const cfg of rotConfig) {
+      if(cfg.a < v.length && cfg.b < v.length) {
+        rotateND(v, cfg.a, cfg.b, t * cfg.speed);
+      }
+    }
+  }
+}
+function projectVertex(v,n){let sx=0,sy=0;for(let d=0;d<n;d++){const a=(d/n)*Math.PI*2;sx+=v[d]*Math.cos(a);sy+=v[d]*Math.sin(a);}return[sx,sy];}
+function projectPathToRect(pathIndices,verts,n,rect,padding){
+  const raw=pathIndices.map(i=>projectVertex(verts[i],n));
+  let x0=Infinity,x1=-Infinity,y0=Infinity,y1=-Infinity;
+  for(const[x,y]of raw){if(x<x0)x0=x;if(x>x1)x1=x;if(y<y0)y0=y;if(y>y1)y1=y;}
+  const avail=rect.w-padding*2,scale=avail/Math.max(x1-x0||1,y1-y0||1);
+  const cx=rect.x+rect.w/2,cy=rect.y+rect.h/2,bcx=(x0+x1)/2,bcy=(y0+y1)/2;
+  return raw.map(([x,y])=>[cx+(x-bcx)*scale,cy+(y-bcy)*scale]);
+}
+
+// ── Audio
+let piano=null;
+function initAudio(){
+  if(piano) return;
+  const reverb=new Tone.Reverb({decay:2.2,wet:.32}).toDestination();
+  const chorus=new Tone.Chorus({frequency:1.2,delayTime:2.5,depth:.15,wet:.18}).connect(reverb);
+  chorus.start();
+  piano=new Tone.PolySynth(Tone.Synth,{
+    oscillator:{type:"triangle"},
+    envelope:{attack:.008,decay:1.4,sustain:.12,release:1.8},
+    volume:-8
+  }).connect(chorus);
+}
+
+// ── Sound / playhead state
+let soundOn = false;
+let playheadX = 0;
+let playheadNoteSchedule = [];
+
+function buildPlayheadSchedule(pathPts, rect) {
+  const scaleKey = getScale();
+  const pts = [...pathPts].map((pt,i)=>({x:pt[0],y:pt[1]})).sort((a,b)=>a.x-b.x);
+  return pts.map((cur,i)=>{
+    const next=pts[i+1];
+    const xSpan=next?Math.max(0.02,(next.x-cur.x)/rect.w):0.08;
+    const yNorm=Math.max(0,Math.min(1,(cur.y-rect.y)/rect.h));
+    return {
+      x: cur.x,
+      note: yToNote(yNorm, scaleKey),
+      dur: xSpanToDur(xSpan),
+      vel: 0.38+Math.random()*0.45,
+      triggered: false
+    };
+  });
+}
+
+// ── Composition state
+// Each item: { id, imageDataUrl, phrase[], label }
+let composition = [];
+let captureCount = 0;
+let isPlaying = false;
+let playTimeouts = [];
+let dragSrcId = null;
+
+function stopAll() {
+  playTimeouts.forEach(t=>clearTimeout(t));
+  playTimeouts=[];
+  isPlaying=false;
+  document.getElementById('btnPlayAll').textContent='▶ Play all';
+  document.getElementById('btnPlayAll').classList.remove('playing');
+  (document.getElementById('btnPlayAllRow')||{textContent:''}).textContent='▶ Play all';
+  (document.getElementById('tray-status')||{textContent:''}).textContent=''; (document.getElementById('tray-status-row')||{textContent:''}).textContent='';
+  document.querySelectorAll('.frame-card').forEach(c=>c.classList.remove('playing-card'));
+}
+
+async function playAll() {
+  if(!piano){await Tone.start();initAudio();}
+  await Tone.start();
+  if(isPlaying){stopAll();return;}
+  if(composition.length===0) return;
+
+  isPlaying=true;
+  document.getElementById('btnPlayAll').textContent='■ Stop';
+  document.getElementById('btnPlayAll').classList.add('playing');
+  (document.getElementById('btnPlayAllRow')||{textContent:''}).textContent='■ Stop';
+
+  const bpm=parseInt(document.getElementById('tempoSel').value);
+  let elapsed=0;
+
+  composition.forEach((frame,fi)=>{
+    // Highlight card when this phrase starts
+    const startT=setTimeout(()=>{
+      if(!isPlaying)return;
+      document.querySelectorAll('.frame-card').forEach(c=>c.classList.remove('playing-card'));
+      const card=document.querySelector(`.frame-card[data-id="${frame.id}"]`);
+      if(card)card.classList.add('playing-card');
+      (document.getElementById('tray-status')||{textContent:''}).textContent=`${fi+1} / ${composition.length}`; (document.getElementById('tray-status-row')||{textContent:''}).textContent=`${fi+1} / ${composition.length}`;
+    }, elapsed*1000);
+    playTimeouts.push(startT);
+
+    // Schedule each note in this phrase
+    frame.phrase.forEach(n=>{
+      const t=setTimeout(()=>{
+        if(!isPlaying)return;
+        try{piano.triggerAttackRelease(n.note,n.dur,Tone.now(),n.vel);}catch(e){}
+      }, elapsed*1000);
+      playTimeouts.push(t);
+      elapsed+=durSecs(n.dur,bpm);
+    });
+
+    // Small gap between phrases (half a beat)
+    elapsed+=durSecs("8n",bpm)*0.5;
+  });
+
+  const doneT=setTimeout(()=>stopAll(), elapsed*1000+600);
+  playTimeouts.push(doneT);
+}
+
+function renderTray() {
+  const track=document.getElementById('tray-track');
+
+  if(composition.length===0){
+    track.innerHTML='<span id="tray-empty" style="font-size:10px;color:#2e2e2e;letter-spacing:0.08em;text-transform:uppercase;padding:0 4px;white-space:nowrap;">Capture frames to compose</span>';
+    document.getElementById('btnPlayAll').disabled=true;
+    return;
+  }
+
+  track.innerHTML='';
+  document.getElementById('btnPlayAll').disabled=false;
+
+  composition.forEach((frame,fi)=>{
+    const card=document.createElement('div');
+    card.className='frame-card';
+    card.draggable=true;
+    card.dataset.id=frame.id;
+
+    const img=document.createElement('img');
+    img.src=frame.imageDataUrl;
+    img.draggable=false;
+
+    const badge=document.createElement('div');
+    badge.className='frame-badge';
+    badge.textContent=fi+1;
+
+    const del=document.createElement('button');
+    del.className='frame-delete';
+    del.textContent='×';
+    del.title='Remove';
+    del.addEventListener('click',e=>{
+      e.stopPropagation();
+      composition=composition.filter(f=>f.id!==frame.id);
+      stopAll();
+      renderTray();
+    });
+
+    card.appendChild(img);
+    card.appendChild(badge);
+    card.appendChild(del);
+
+    // Drag to reorder
+    card.addEventListener('dragstart',e=>{
+      dragSrcId=frame.id;
+      card.classList.add('dragging');
+      e.dataTransfer.effectAllowed='move';
+    });
+    card.addEventListener('dragend',()=>{
+      card.classList.remove('dragging');
+      document.querySelectorAll('.frame-card').forEach(c=>c.classList.remove('drag-over-card'));
+    });
+    card.addEventListener('dragover',e=>{
+      e.preventDefault();
+      document.querySelectorAll('.frame-card').forEach(c=>c.classList.remove('drag-over-card'));
+      card.classList.add('drag-over-card');
+    });
+    card.addEventListener('drop',e=>{
+      e.preventDefault();
+      if(!dragSrcId||dragSrcId===frame.id) return;
+      const srcIdx=composition.findIndex(f=>f.id===dragSrcId);
+      const dstIdx=composition.findIndex(f=>f.id===frame.id);
+      const [moved]=composition.splice(srcIdx,1);
+      composition.splice(dstIdx,0,moved);
+      dragSrcId=null;
+      stopAll();
+      renderTray();
+    });
+
+    // Click to preview single phrase
+    card.addEventListener('click', async ()=>{
+      if(!piano){await Tone.start();initAudio();}
+      await Tone.start();
+      stopAll();
+      const bpm=parseInt(document.getElementById('tempoSel').value);
+      card.classList.add('playing-card');
+      let t=0;
+      frame.phrase.forEach(n=>{
+        const to=setTimeout(()=>{
+          try{piano.triggerAttackRelease(n.note,n.dur,Tone.now(),n.vel);}catch(e){}
+        },t*1000);
+        playTimeouts.push(to);
+        t+=durSecs(n.dur,bpm);
+      });
+      const doneT=setTimeout(()=>{
+        card.classList.remove('playing-card');
+        playTimeouts=[];
+      },t*1000+400);
+      playTimeouts.push(doneT);
+    });
+
+    track.appendChild(card);
+  });
+}
+
+// ── p5 sketch
+new p5(function(p){
+  let angle=0,paused=false,pathIndices=[],colorSeed=42,cW,cH;
+  let latestPathPts=[],latestRect=null,latestAngle=0;
+
+  function getRect(){const m=40,s=Math.min(cW,cH)-m*2;return{x:(cW-s)*.5,y:(cH-s)*.5,w:s,h:s};}
+
+  function regenerate(){
+    const n=parseInt(document.getElementById('dimSel').value);
+    pathIndices=makeDiagonalPath(n);
+    angle=Math.random()*Math.PI*2;
+    colorSeed=Math.floor(Math.random()*100000);
+    const rotSeed=Math.floor(Math.random()*1e9);
+    rotConfig=buildRotConfig(n, rotSeed);
+    skipFrameCount=0;
+    (document.getElementById('info')||{textContent:''}).textContent=`dims: ${n}  ·  nodes: ${pathIndices.length}`;
+    if(paused){paused=false;document.getElementById('btnPause').textContent='Pause';p.loop();}
+  }
+
+  p.setup=function(){
+    const wrap=document.getElementById('canvas-wrap');
+    cW=wrap.clientWidth;cH=wrap.clientHeight;
+    p.createCanvas(cW,cH).parent('canvas-wrap');
+    p.colorMode(p.RGB,255);
+    p.pixelDensity(window.devicePixelRatio||1);
+    regenerate();
+
+    document.getElementById('speedSel').addEventListener('input',e=>(document.getElementById('speedVal')||{textContent:''}).textContent=e.target.value);
+    document.getElementById('blocksSel').addEventListener('input',e=>(document.getElementById('blocksVal')||{textContent:''}).textContent=e.target.value);
+    document.getElementById('tempoSel').addEventListener('input',e=>(document.getElementById('tempoVal')||{textContent:''}).textContent=e.target.value);
+    document.getElementById('palSel').addEventListener('change',()=>colorSeed=Math.floor(Math.random()*100000));
+    document.getElementById('dimSel').addEventListener('change',regenerate);
+    document.getElementById('btnNew').addEventListener('click',regenerate);
+    document.getElementById('btnPause').addEventListener('click',()=>{
+      paused=!paused;
+      document.getElementById('btnPause').textContent=paused?'Play':'Pause';
+      paused?p.noLoop():p.loop();
+    });
+    document.getElementById('btnSave').addEventListener('click',()=>p.saveCanvas('artificiata-ii-'+Date.now(),'png'));
+
+    // CAPTURE — registered inside setup but guard against double-add
+    if(!window._captureListenerAdded) {
+      window._captureListenerAdded = true;
+      document.getElementById('btnCapture').addEventListener('click',async()=>{
+        if(!latestPathPts.length||!latestRect) return;
+        if(!piano){await Tone.start();initAudio();}
+        const imageDataUrl = document.querySelector('canvas').toDataURL('image/png');
+        const scaleKey=getScale();
+        const phrase=pathToPhrase(latestPathPts,latestRect,scaleKey);
+        captureCount++;
+        composition.push({
+          id: captureCount,
+          imageDataUrl,
+          phrase,
+          label: `Frame ${captureCount}`
+        });
+        renderTray();
+        const btn=document.getElementById('btnCapture');
+        btn.textContent='✓ Captured';
+        btn.style.borderColor='#fff';
+        btn.style.color='#fff';
+        setTimeout(()=>{
+          btn.textContent='⊡ Capture';
+          btn.style.borderColor='';
+          btn.style.color='';
+        },700);
+      });
+    }
+
+    document.getElementById('btnPlayAll').addEventListener('click',playAll);
+    // btnPlayAllRow and btnClearAllRow use inline onclick
+    document.getElementById('btnClearAll').addEventListener('click',()=>{
+      composition=[];stopAll();renderTray();
+    });
+
+    // Sound on/off
+    document.getElementById('btnSound').addEventListener('click', async ()=>{
+      if(!piano){await Tone.start();initAudio();}
+      await Tone.start();
+      soundOn=!soundOn;
+      const btn=document.getElementById('btnSound');
+      btn.textContent=soundOn?'Sound: on':'Sound: off';
+      btn.style.borderColor=soundOn?'#fff':'';
+      btn.style.color=soundOn?'#fff':'';
+      if(soundOn){
+        playheadX=latestRect?latestRect.x:0;
+        playheadNoteSchedule=[];
+      }
+    });
+
+    window.addEventListener('resize',()=>{cW=wrap.clientWidth;cH=wrap.clientHeight;p.resizeCanvas(cW,cH);});
+  };
+
+  p.draw=function(){
+    const n=parseInt(document.getElementById('dimSel').value);
+    const speed=parseInt(document.getElementById('speedSel').value);
+    const numBlocks=parseInt(document.getElementById('blocksSel').value);
+    const palKey=document.getElementById('palSel').value;
+    const palette=PALETTES[palKey];
+
+    angle+=speed*0.0000072;
+
+    const verts=makeVertices(n);
+    applyRotations(verts,angle);
+    const rect=getRect();
+    const pathPts=projectPathToRect(pathIndices,verts,n,rect,rect.w*0.05);
+
+    // Shape check
+    const sl=[];for(let i=0;i<pathPts.length-1;i++){const dx=pathPts[i+1][0]-pathPts[i][0],dy=pathPts[i+1][1]-pathPts[i][1];sl.push(Math.sqrt(dx*dx+dy*dy));}
+    const avg=sl.reduce((a,b)=>a+b,0)/sl.length;
+    const cv=Math.sqrt(sl.reduce((a,b)=>a+Math.pow(b-avg,2),0)/sl.length)/(avg||1);
+    const ac=[];for(let i=0;i<pathPts.length-2;i++){const ax=pathPts[i+1][0]-pathPts[i][0],ay=pathPts[i+1][1]-pathPts[i][1],bx=pathPts[i+2][0]-pathPts[i+1][0],by=pathPts[i+2][1]-pathPts[i+1][1];ac.push(Math.abs((ax*bx+ay*by)/((Math.sqrt(ax*ax+ay*ay)||1)*(Math.sqrt(bx*bx+by*by)||1))));}
+    const avgCos2=ac.reduce((a,b)=>a+b,0)/(ac.length||1);
+    const pathXs=pathPts.map(p=>p[0]), pathYs=pathPts.map(p=>p[1]);
+    const pathW=Math.max(...pathXs)-Math.min(...pathXs);
+    const pathH=Math.max(...pathYs)-Math.min(...pathYs);
+    const aspectRatio=Math.min(pathW,pathH)/Math.max(pathW,pathH||1);
+    const isTooCircular=(cv<0.28&&avgCos2>0.78)||(aspectRatio>0.82&&cv<0.32);
+    if(isTooCircular && skipFrameCount < MAX_SKIP_FRAMES){
+      skipFrameCount++;
+      return;
+    }
+    skipFrameCount=0; // reset counter once a good frame passes
+
+    latestPathPts=pathPts;
+    latestRect=rect;
+
+    const xCoords=[rect.x,...pathPts.map(pt=>pt[0]),rect.x+rect.w];
+    const yCoords=[rect.y,...pathPts.map(pt=>pt[1]),rect.y+rect.h];
+
+    p.background(17);
+    p.push();
+    p.drawingContext.save();
+    p.drawingContext.beginPath();
+    p.drawingContext.rect(rect.x,rect.y,rect.w,rect.h);
+    p.drawingContext.clip();
+
+    p.randomSeed(colorSeed);
+    p.noStroke();p.fill(195,195,190);p.rect(rect.x,rect.y,rect.w,rect.h);
+    p.noStroke();
+    for(let i=0;i<numBlocks;i++){
+      let x1=p.random(xCoords),x2=p.random(xCoords),y1=p.random(yCoords),y2=p.random(yCoords);
+      let sx=Math.min(x1,x2),bw=Math.abs(x2-x1),sy=Math.min(y1,y2),bh=Math.abs(y2-y1);
+      if(bw<2||bh<2) continue;
+      const r=p.random();
+      if(r<0.20){sx=rect.x;bw=rect.w;}else if(r<0.40){sy=rect.y;bh=rect.h;}
+      const col=p.random(palette);
+      p.fill(col[0],col[1],col[2]);
+      p.rect(sx,sy,bw,bh);
+    }
+    p.stroke(0,0,0,70);p.strokeWeight(1.4);
+    for(const pt of pathPts)p.line(rect.x,pt[1],rect.x+rect.w,pt[1]);
+
+    const GAP=2;
+    p.strokeCap(p.ROUND);p.strokeJoin(p.MITER);p.noFill();
+    for(let i=0;i<pathPts.length-1;i++){
+      const[x0,y0]=pathPts[i],[x1,y1]=pathPts[i+1];
+      const dx=x1-x0,dy=y1-y0,len=Math.sqrt(dx*dx+dy*dy);
+      if(len<GAP*2)continue;
+      const nx=dx/len,ny=dy/len;
+      p.stroke(255,255,255,255);p.strokeWeight(3.5);
+      p.line(x0+nx*GAP,y0+ny*GAP,x1-nx*GAP,y1-ny*GAP);
+    }
+
+    p.drawingContext.restore();
+    p.pop();
+    // ── Note flash dots — only appear for a brief moment when playhead crosses vertex
+    if(soundOn) {
+      const FLASH_RADIUS = 18; // px window around playhead that triggers flash
+      const FLASH_SIZE = 18;
+      p.noStroke();
+      for(let i=0; i<pathPts.length; i++) {
+        const [px,py] = pathPts[i];
+        const dist = Math.abs(px - playheadX);
+        if(dist < FLASH_RADIUS) {
+          // Fade out quickly as playhead moves away
+          const alpha = Math.round(220 * (1 - dist / FLASH_RADIUS));
+          p.fill(255, 255, 200, alpha);
+          p.ellipse(px, py, FLASH_SIZE, FLASH_SIZE);
+        }
+      }
+    }
+
+    p.noFill();p.stroke(50,50,50);p.strokeWeight(1.5);
+    p.rect(rect.x,rect.y,rect.w,rect.h);
+
+    // ── PLAYHEAD
+    if(soundOn && latestRect){
+      const bpm=parseInt(document.getElementById('tempoSel').value);
+      const secondsPerCycle=(60/bpm)*8;
+      const pxPerFrame=rect.w/(secondsPerCycle*60);
+      playheadX+=pxPerFrame;
+      if(playheadX>rect.x+rect.w){
+        playheadX=rect.x;
+        playheadNoteSchedule=buildPlayheadSchedule(pathPts,rect);
+        playheadNoteSchedule.forEach(n=>n.triggered=false);
+      }
+      if(playheadNoteSchedule.length===0){
+        playheadNoteSchedule=buildPlayheadSchedule(pathPts,rect);
+      }
+      // Trigger notes as playhead crosses vertex X
+      for(const ns of playheadNoteSchedule){
+        if(!ns.triggered && ns.x>=rect.x && ns.x<=playheadX){
+          ns.triggered=true;
+          try{piano.triggerAttackRelease(ns.note,ns.dur,Tone.now(),ns.vel);}catch(e){}
+        }
+      }
+      // Draw playhead line
+      p.stroke(255,255,255,120);p.strokeWeight(1.5);
+      p.line(playheadX,rect.y,playheadX,rect.y+rect.h);
+    }
+  };
+});
+</script>
+</body>
+</html>
