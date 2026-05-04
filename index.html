@@ -617,6 +617,14 @@ new p5(function(p){
   function getRect(){const m=40,s=Math.min(cW,cH)-m*2;return{x:(cW-s)*.5,y:(cH-s)*.5,w:s,h:s};}
 
   function regenerate(){
+    // If sound is on, turn it off first to avoid playhead freeze
+    if(soundOn){
+      soundOn=false;
+      playheadNoteSchedule=[];
+      playheadX=0;
+      const btn=document.getElementById('btnSound');
+      if(btn){ btn.textContent='Sound: off'; btn.style.borderColor=''; btn.style.color=''; }
+    }
     const n=parseInt(document.getElementById('dimSel').value);
     pathIndices=makeDiagonalPath(n);
     angle=Math.random()*Math.PI*2;
