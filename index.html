@@ -369,12 +369,21 @@ function pathToPhrase(pathPts, rect, scaleKey) {
 
 // ── ND
 function makeVertices(n){const v=[];for(let i=0;i<(1<<n);i++){const pt=new Float32Array(n);for(let d=0;d<n;d++)pt[d]=((i>>d)&1)-.5;v.push(pt);}return v;}
+
+// Lightweight version — only extracts the 12 path vertices, not all 2048
+function makePathVertices(n, pathIndices){
+  return pathIndices.map(idx=>{
+    const v=new Float32Array(n);
+    for(let d=0;d<n;d++) v[d]=((idx>>d)&1)-.5;
+    return v;
+  });
+}
 function makeDiagonalPath(n){const p=[0];let c=0;for(let d=0;d<n;d++){c|=(1<<d);p.push(c);}return p;}
 function rotateND(v,a,b,t){const ca=Math.cos(t),sa=Math.sin(t),va=v[a],vb=v[b];v[a]=va*ca-vb*sa;v[b]=va*sa+vb*ca;}
 // Per-composition rotation config — randomised on each New
 let rotConfig = [];
 let skipFrameCount = 0;      // how many consecutive frames were filtered
-const MAX_SKIP_FRAMES = 90;  // after this many skipped frames, force display
+const MAX_SKIP_FRAMES = 30;  // after this many skipped frames, force display
 
 function buildRotConfig(n, seed) {
   // Seeded random for reproducibility within a composition
@@ -398,18 +407,43 @@ function buildRotConfig(n, seed) {
   }));
 }
 
-function applyRotations(verts, t) {
-  for(const v of verts) {
-    for(const cfg of rotConfig) {
-      if(cfg.a < v.length && cfg.b < v.length) {
-        rotateND(v, cfg.a, cfg.b, t * cfg.speed);
+function applyRotations(verts,t){
+  for(const v of verts){
+    // Use rotConfig if available (set by buildRotConfig), else fallback to defaults
+    if(rotConfig && rotConfig.length>0){
+      for(const cfg of rotConfig){
+        if(cfg.a<v.length&&cfg.b<v.length) rotateND(v,cfg.a,cfg.b,t*cfg.speed);
       }
+    } else {
+      rotateND(v,0,1,t*1.0);rotateND(v,2,3,t*.7);
+      rotateND(v,4,5,t*.4);rotateND(v,6,7,t*.9);
+      rotateND(v,8,9,t*.5);
+      if(v.length>10)rotateND(v,10,0,t*.3);
+      if(v.length>11)rotateND(v,11,1,t*.6);
+      if(v.length>12)rotateND(v,12,2,t*.35);
+      if(v.length>13)rotateND(v,13,3,t*.55);
     }
   }
 }
-function projectVertex(v,n){let sx=0,sy=0;for(let d=0;d<n;d++){const a=(d/n)*Math.PI*2;sx+=v[d]*Math.cos(a);sy+=v[d]*Math.sin(a);}return[sx,sy];}
-function projectPathToRect(pathIndices,verts,n,rect,padding){
-  const raw=pathIndices.map(i=>projectVertex(verts[i],n));
+// Cache trig basis vectors per N — recomputed only when N changes
+const _trigCache = {};
+function getTrigBasis(n){
+  if(!_trigCache[n]){
+    const cos=new Float32Array(n), sin=new Float32Array(n);
+    for(let d=0;d<n;d++){const a=(d/n)*Math.PI*2;cos[d]=Math.cos(a);sin[d]=Math.sin(a);}
+    _trigCache[n]={cos,sin};
+  }
+  return _trigCache[n];
+}
+function projectVertex(v,n){
+  const {cos,sin}=getTrigBasis(n);
+  let sx=0,sy=0;
+  for(let d=0;d<n;d++){sx+=v[d]*cos[d];sy+=v[d]*sin[d];}
+  return[sx,sy];
+}
+function projectPathToRect(pathVerts,n,rect,padding){
+  // pathVerts: already-rotated Float32Array vertices (one per path node)
+  const raw=pathVerts.map(v=>projectVertex(v,n));
   let x0=Infinity,x1=-Infinity,y0=Infinity,y1=-Infinity;
   for(const[x,y]of raw){if(x<x0)x0=x;if(x>x1)x1=x;if(y<y0)y0=y;if(y>y1)y1=y;}
   const avail=rect.w-padding*2,scale=avail/Math.max(x1-x0||1,y1-y0||1);
@@ -641,7 +675,8 @@ new p5(function(p){
     cW=wrap.clientWidth;cH=wrap.clientHeight;
     p.createCanvas(cW,cH).parent('canvas-wrap');
     p.colorMode(p.RGB,255);
-    p.pixelDensity(window.devicePixelRatio||1);
+    p.pixelDensity(1); // force 1x density — halves pixel fill work on retina screens
+    p.frameRate(40);   // 40fps is smooth enough, saves ~33% CPU vs 60fps
     regenerate();
 
     document.getElementById('speedSel').addEventListener('input',e=>(document.getElementById('speedVal')||{textContent:''}).textContent=e.target.value);
@@ -719,10 +754,11 @@ new p5(function(p){
 
     angle+=speed*0.0000072;
 
-    const verts=makeVertices(n);
-    applyRotations(verts,angle);
     const rect=getRect();
-    const pathPts=projectPathToRect(pathIndices,verts,n,rect,rect.w*0.05);
+    // Only allocate and rotate 12 path vertices — not 2048
+    const pathVerts=makePathVertices(n, pathIndices);
+    applyRotations(pathVerts, angle);
+    const pathPts=projectPathToRect(pathVerts,n,rect,rect.w*0.05);
 
     // Shape check
     const sl=[];for(let i=0;i<pathPts.length-1;i++){const dx=pathPts[i+1][0]-pathPts[i][0],dy=pathPts[i+1][1]-pathPts[i][1];sl.push(Math.sqrt(dx*dx+dy*dy));}
@@ -734,7 +770,7 @@ new p5(function(p){
     const pathW=Math.max(...pathXs)-Math.min(...pathXs);
     const pathH=Math.max(...pathYs)-Math.min(...pathYs);
     const aspectRatio=Math.min(pathW,pathH)/Math.max(pathW,pathH||1);
-    const isTooCircular=(cv<0.28&&avgCos2>0.78)||(aspectRatio>0.82&&cv<0.32);
+    const isTooCircular=(cv<0.18&&avgCos2>0.88)||(aspectRatio>0.92&&cv<0.18);
     if(isTooCircular && skipFrameCount < MAX_SKIP_FRAMES){
       skipFrameCount++;
       return;
