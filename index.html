@@ -21,11 +21,12 @@
     #canvas-wrap {
       flex: 1;
       display: flex;
-      align-items: center;
+      align-items: flex-start;   /* top-align — consistent top gap */
       justify-content: center;
       overflow: hidden;
       min-height: 0;
       position: relative;
+      padding-top: 28px;         /* fixed gap from top */
     }
     canvas { display: block; }
 
@@ -168,8 +169,9 @@
     }
     .ctrl-row {
       display: flex;
+      flex-wrap: wrap;          /* wrap to next line when too narrow */
       align-items: center;
-      gap: 14px;
+      gap: 10px 14px;           /* row-gap col-gap */
       padding: 6px 14px;
       border-bottom: 1px solid #111;
     }
@@ -177,8 +179,20 @@
     .ctrl-right {
       margin-left: auto;
       display: flex;
+      flex-wrap: wrap;
       gap: 6px;
       align-items: center;
+    }
+    /* When the row is too narrow, ctrl-right wraps to its own line
+       and should align left instead of staying right */
+    .ctrl-row {
+      container-type: inline-size;
+    }
+    @container (max-width: 700px) {
+      .ctrl-right {
+        margin-left: 0;
+        width: 100%;
+      }
     }
     .ctrl-group { display: flex; align-items: center; gap: 7px; }
     .ctrl-section-label { font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: #444; }
@@ -648,7 +662,14 @@ new p5(function(p){
   let angle=0,paused=false,pathIndices=[],colorSeed=42,cW,cH;
   let latestPathPts=[],latestRect=null,latestAngle=0;
 
-  function getRect(){const m=40,s=Math.min(cW,cH)-m*2;return{x:(cW-s)*.5,y:(cH-s)*.5,w:s,h:s};}
+  function getRect(){
+    const topGap=28;   // matches padding-top on #canvas-wrap
+    const sideGap=28;
+    const s=Math.min(cW - sideGap*2, cH - topGap);
+    const x=(cW-s)*0.5;
+    const y=topGap;    // fixed top gap, canvas sits near the top
+    return{x,y,w:s,h:s};
+  }
 
   function regenerate(){
     // If sound is on, turn it off first to avoid playhead freeze
