@@ -9,7 +9,7 @@
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
-      background: #888;
+      background: #111;
       font-family: 'Plus Jakarta Sans', 'Helvetica Neue', Arial, sans-serif;
       height: 100vh;
       display: flex;
@@ -21,18 +21,18 @@
     #canvas-wrap {
       flex: 1;
       display: flex;
-      align-items: flex-start;   /* top-align — consistent top gap */
+      align-items: center;
       justify-content: center;
       overflow: hidden;
       min-height: 0;
       position: relative;
-      padding-top: 28px;         /* fixed gap from top */
+      background: #111;
     }
     canvas { display: block; }
 
     /* ── Composition tray ── */
     #tray-panel {
-      background: #0c0c0c;
+      background: #111;
       border-top: 1px solid #1e1e1e;
       display: flex;
       flex-direction: column;
@@ -663,12 +663,9 @@ new p5(function(p){
   let latestPathPts=[],latestRect=null,latestAngle=0;
 
   function getRect(){
-    const topGap=28;   // matches padding-top on #canvas-wrap
-    const sideGap=28;
-    const s=Math.min(cW - sideGap*2, cH - topGap);
-    const x=(cW-s)*0.5;
-    const y=topGap;    // fixed top gap, canvas sits near the top
-    return{x,y,w:s,h:s};
+    const m=28;
+    const s=Math.min(cW,cH)-m*2;
+    return{x:(cW-s)*0.5, y:(cH-s)*0.5, w:s, h:s};
   }
 
   function regenerate(){
